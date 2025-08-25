@@ -31,7 +31,7 @@ function App() {
   async function send() {
     setstatus(true);
     try {
-      const response = await axios.post("https://bulk-mails-zeta.vercel.app/sendMail", {
+      const response = await axios.post("https://bulkmail-frontend1-five.vercel.app/", {
         msg: msg,
         emailList: emailList
       });
