@@ -1,67 +1,63 @@
-const express = require("express")
-const cors = require("cors")
-// Install Nodemailer
+const express = require("express");
+const cors = require("cors");
 const nodemailer = require("nodemailer");
-const mongoose = require("mongoose")
+const mongoose = require("mongoose");
 
-const app = express()
-app.use(cors())
-app.use(express.json())
+const app = express();
 
-mongoose.connect("mongodb+srv://vidhya:vidhya123@cluster0.gryvbqp.mongodb.net/passkey?retryWrites=true&w=majority&appName=Cluster0").then(function(){
-    console.log("Database Connected...")
-}).catch(function(err){
-    console.log("Failed to Connect:",err)
-})
+// Allow requests from your frontend domain
+app.use(cors({
+  origin: 'https://bulkmail-frontend1-five.vercel.app/' // no trailing slash
+}));
 
-const credential = mongoose.model("credential",{},"bulkmail")
+app.use(express.json());
 
+// Connect to MongoDB
+mongoose.connect(process.env.MONGO_URI)
+  .then(() => console.log("✅ Connected to MongoDB"))
+  .catch(err => console.error("❌ MongoDB connection failed:", err));
 
-app.post("/sendemail", function (req, res) {
+// Define the credential model
+const credential = mongoose.model("credential", {}, "bulkmail");
 
-    var msg = req.body.msg
-    var emailList = req.body.emailList
-
-credential.find().then(function(data){
-    const transporter = nodemailer.createTransport({
-    service: "gmail", // true for 465, false for other ports
-    auth: {
-        user: data[0].toJSON().user,
-        pass: data[0].toJSON().pass,
-    },
+// Health check route
+app.get("/", (req, res) => {
+  res.send("Backend is running 🚀");
 });
-    new Promise(async function (resolve, reject) {
-        try {
-            for (var i = 0; i < emailList.length; i++) 
-            {
-                await transporter.sendMail(
-                    {
-                        from: "itsmevidhya10@gmail.com",
-                        to: emailList[i],
-                        subject: "A Message from Bulk Mail App",
-                        text: msg
-                    }
-                )
-                console.log("Email sent to:"+emailList[i])
-            }
-            resolve("Success")
 
-        }
-        catch (error) 
-        {
-            reject("Failed")
-        }
-    }).then(function () {
-            res.send(true)
-    }).catch(function () {
-            res.send(false)
-    })
-}).catch(function(error){
-    console.log(error)
-})
+// Email sending route
+app.post("/sendMail", async (req, res) => {
+  const { msg, emailList } = req.body;
 
-})
+  try {
+    const data = await credential.find();
+    if (!data || data.length === 0) {
+      return res.status(500).json({ error: "No credentials found in DB" });
+    }
 
-app.listen(5000, function () {
-    console.log("Server Started......")
-})
+    const { user, pass } = data[0].toJSON();
+
+    const transporter = nodemailer.createTransport({
+      service: "gmail",
+      auth: { user, pass },
+    });
+
+    for (let email of emailList) {
+      await transporter.sendMail({
+        from: user,
+        to: email,
+        subject: "A message from Bulk Mail App",
+        text: msg,
+      });
+      console.log("📧 Email sent to:", email);
+    }
+
+    res.send(true);
+  } catch (error) {
+    console.error("❌ Error sending emails:", error);
+    res.send(false);
+  }
+});
+
+// Export the app for Vercel
+module.exports = app;
